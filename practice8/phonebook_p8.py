@@ -1,54 +1,123 @@
 import psycopg2
-from config import load_config
+import csv
 
-def main():
-    config = load_config()
+conn = psycopg2.connect(
+    host = "localhost",
+    database = "suppliers",
+    user = "postgres",
+    password = "arai260807"
+    )
+
+cur = conn.cursor()
+cur.execute("DROP TABLE IF EXISTS phonebook;")
+cur.execute(" CREATE TABLE phonebook (id SERIAL PRIMARY KEY,name VARCHAR(100),phone VARCHAR(100));")
+
+conn.commit()
+
+def insert_from_csv():
+    with open("contacts.csv", "r") as f:
+        reader = csv.reader(f)
+        next(reader)
+        for row in reader:
+            cur.execute("INSERT INTO phonebook (name, phone) VALUES (%s, %s)", row)
+    conn.commit()
+    print("Added successfully from CSV file!")
+
+
+def insert_from_console():
+    name = input("Enter the name: ")
+    phone = input("Enter the phone: ")
+
+    cur.execute("INSERT INTO phonebook (name, phone) VALUES (%s, %s)", (name, phone))
+    conn.commit()
+
+
+def update_con():
+    name = input("Enter the name for updating data: ")
+    print("What do you want to change?")
+    print("1.Name")
+    print("2.Phone")
+
+    choice = input("Enter your choice: ")
+    if choice == "1":
+        new_name = input("Enter a new name: ")
+        cur.execute("UPDATE phonebook SET name = %s WHERE name = %s", (new_name, name))
+        
+    elif choice == "2":
+        new_phone = input("Enter a new phone: ")
+        cur.execute("UPDATE phonebook SET phone = %s WHERE name = %s", (new_phone, name))
+        
+    else:
+        print("Wrong choice!")
+        return
     
-    try:
-        with psycopg2.connect(**config) as conn:
-            with conn.cursor() as cur:
-                print("=== Testing PostgreSQL Functions ===\n")
-                
-                print("1. Adding contacts...")
-                cur.execute("CALL upsert_contact(%s, %s)", ('Arai', '87771234567'))
-                cur.execute("CALL upsert_contact(%s, %s)", ('Arai2', '87771234568'))
-                cur.execute("CALL upsert_contact(%s, %s)", ('Arai3', '87771234569'))
-                cur.execute("CALL upsert_contact(%s, %s)", ('Arai4', '87771234560'))
-                conn.commit()
-                print("   Contacts added\n")
-                
-                print("2. Searching contacts with '8777':")
-                cur.execute("SELECT * FROM search_contacts(%s)", ('8777',))
-                for row in cur.fetchall():
-                    print(f"   Name: {row[0]}, Phone: {row[1]}")
-                
-                print("\n3. Pagination (first 2 contacts):")
-                cur.execute("SELECT * FROM get_contacts_paginated(%s, %s)", (2, 0))
-                for row in cur.fetchall():
-                    print(f"   ID: {row[0]}, Name: {row[1]}, Phone: {row[2]}")
-                
-                print("\n4. Inserting multiple contacts:")
-                cur.execute("CALL insert_many_contacts(%s, %s)", (['John', 'Jane'], ['123456', '654321']))
-                conn.commit()
-                print("   Contacts inserted\n")
-                
-                print("5. All contacts:")
-                cur.execute("SELECT * FROM phonebook")
-                for row in cur.fetchall():
-                    print(f"   ID: {row[0]}, Name: {row[1]}, Phone: {row[2]}")
-                
-                print("\n6. Deleting contact 'Arai3':")
-                cur.execute("CALL delete_contact(%s, %s)", ('Arai3', None))
-                conn.commit()
-                print("   Contact deleted\n")
-                
-                print("7. Final contacts:")
-                cur.execute("SELECT * FROM phonebook")
-                for row in cur.fetchall():
-                    print(f"   ID: {row[0]}, Name: {row[1]}, Phone: {row[2]}")
-                    
-    except Exception as e:
-        print(f"Error: {e}")
+    conn.commit()
 
-if __name__ == "__main__":
-    main()
+def delete_contacts():
+    name = input("Enter the name for deleting: ")
+    print("How do you want to delete?")
+    print("1. With name")
+    print("2. With phone")
+
+    choice = input("Enter your choice: ")
+    if choice == "1":
+        name1 = input("Enter the name: ")
+        cur.execute("DELETE FROM phonebook WHERE name = %s", (name1,))
+    elif choice == "2":
+        phone = input("Enter the phone: ")
+        cur.execute("DELETE FROM phonebook WHERE phone = %s", (phone,))
+    else:
+        print("Wrong choice!")
+    conn.commit()
+
+def search_contacts():
+    print("1.View all contacts.\n2.Search with name.\n3.Search with phone prefix.")
+
+    choice = input("Enter your choice: ")
+    if choice =="1":
+        cur.execute("SELECT * FROM phonebook")
+        rows = cur.fetchall()
+    elif choice == "2":
+        name = input("Please enter the name for search: ")
+        cur.execute("SELECT * FROM phonebook WHERE name = %s", (name,))
+
+        rows = cur.fetchall()
+    elif choice == "3":
+        prefix = input("Please enter the prefix: ")
+        cur.execute("SELECT * FROM phonebook WHERE phone LIKE %s", (prefix+"%",))
+
+        rows = cur.fetchall()
+    
+    else:
+        print("Wrong choice!")
+        return
+    
+    if rows:
+        for row in rows:
+            print(f"ID:{row[0]}, Name: {row[1]}, Phone: {row[2]},")
+    else:
+        print("Nothing found.")
+try:
+    while True:
+        print("\n1.Insert data from a CSV file. \n2.Insert data from a console. \n3.Updating a contact's first name or phone number. \n4.Querying contacts with different filters (e.g. by name, by phone prefix). \n5.Deleting a contact by username or phone number")
+
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            insert_from_csv()
+        elif choice == "2":
+            insert_from_console()
+        elif choice == "3":
+            update_con()
+        elif choice == "4":
+            search_contacts()
+        elif choice == "5":
+            delete_contacts()
+        else:
+            print("Wrong choice!")
+
+        cur.execute("SELECT * FROM phonebook;")
+        print(cur.fetchall())
+finally:
+    cur.close()
+    conn.close()
+    print("Connection closed.")
